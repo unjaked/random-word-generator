@@ -1,5 +1,10 @@
 "use strict";
 
+document.documentElement.classList.toggle(
+  "extension-popup",
+  window.location.protocol === "chrome-extension:"
+);
+
 const WORDLISTS = Object.freeze({
   long: Object.freeze({
     url: "eff_large_wordlist.txt",
@@ -24,9 +29,25 @@ const DEFAULT_FORMATTING = Object.freeze({
   separator: "none",
   customSeparator: "/",
 });
+const STORAGE_KEY = "randomWordGeneratorSettings";
+const CASE_STYLES = new Set(["capitalize", "lower", "upper", "random"]);
+const SEPARATOR_STYLES = new Set([
+  "none",
+  "space",
+  "hyphen",
+  "underscore",
+  "period",
+  "comma",
+  "newline",
+  "random",
+  "custom",
+]);
 
 const elements = {
   form: document.querySelector("#settingsForm"),
+  settingsButton: document.querySelector("#settingsButton"),
+  settingsDialog: document.querySelector("#settingsDialog"),
+  closeSettingsButton: document.querySelector("#closeSettingsButton"),
   wordListToggle: document.querySelector("#wordListToggle"),
   wordListInputs: document.querySelectorAll('input[name="wordList"]'),
   minLength: document.querySelector("#minLength"),
@@ -54,6 +75,7 @@ let eligibleWords = [];
 let activeWordList = "short";
 let loadedWordLists = new Map();
 let copyResetTimer;
+let currentPhrase = "";
 
 function parseWordlist(text) {
   return text
@@ -99,6 +121,9 @@ function activateWordList(key) {
   activeWordList = key;
   words = data.words;
   wordsByLength = data.wordsByLength;
+  const selectedInput = Array.from(elements.wordListInputs)
+    .find((input) => input.value === key);
+  if (selectedInput) selectedInput.checked = true;
 
   elements.minLength.min = String(config.minLength);
   elements.minLength.max = String(config.maxLength);
@@ -110,6 +135,79 @@ function activateWordList(key) {
 
   updateSecurityMeter();
   generatePhrase();
+}
+
+async function loadStoredSettings() {
+  try {
+    if (globalThis.chrome?.storage?.local) {
+      const stored = await chrome.storage.local.get(STORAGE_KEY);
+      return stored[STORAGE_KEY] ?? null;
+    }
+
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch (error) {
+    console.warn("Stored settings could not be loaded.", error);
+    return null;
+  }
+}
+
+async function persistSettings() {
+  const settings = {
+    wordList: activeWordList,
+    ...getSettings(),
+  };
+
+  try {
+    if (globalThis.chrome?.storage?.local) {
+      await chrome.storage.local.set({ [STORAGE_KEY]: settings });
+      return;
+    }
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch (error) {
+    console.warn("Settings could not be saved.", error);
+  }
+}
+
+function applyStoredSettings(stored) {
+  if (!stored || typeof stored !== "object") return false;
+
+  const wordList = Object.hasOwn(WORDLISTS, stored.wordList) ? stored.wordList : "short";
+  activateWordList(wordList);
+
+  const config = WORDLISTS[wordList];
+  const minLength = clamp(
+    Number.parseInt(stored.minLength, 10) || config.minLength,
+    config.minLength,
+    config.maxLength
+  );
+  const maxLength = clamp(
+    Number.parseInt(stored.maxLength, 10) || config.defaultMaxLength,
+    config.minLength,
+    config.maxLength
+  );
+  elements.minLength.value = String(minLength);
+  elements.maxLength.value = String(Math.max(minLength, maxLength));
+  elements.wordCount.value = String(clamp(
+    Number.parseInt(stored.wordCount, 10) || config.defaultWordCount,
+    1,
+    50
+  ));
+  elements.caseStyle.value = CASE_STYLES.has(stored.caseStyle)
+    ? stored.caseStyle
+    : DEFAULT_FORMATTING.caseStyle;
+  elements.separator.value = SEPARATOR_STYLES.has(stored.separator)
+    ? stored.separator
+    : DEFAULT_FORMATTING.separator;
+  elements.customSeparator.value = typeof stored.customSeparator === "string"
+    ? stored.customSeparator.slice(0, 8)
+    : DEFAULT_FORMATTING.customSeparator;
+  elements.customSeparatorField.hidden = elements.separator.value !== "custom";
+
+  updateSecurityMeter();
+  generatePhrase();
+  return true;
 }
 
 function readInteger(input, fallback) {
@@ -278,7 +376,19 @@ function generatePhrase() {
     return applyCase(word, settings.caseStyle);
   });
 
-  elements.result.value = joinWords(selectedWords, settings);
+  currentPhrase = joinWords(selectedWords, settings);
+  if (settings.separator === "none") {
+    elements.result.replaceChildren(
+      ...selectedWords.map((word) => {
+        const wordElement = document.createElement("span");
+        wordElement.className = "visual-word";
+        wordElement.textContent = word;
+        return wordElement;
+      })
+    );
+  } else {
+    elements.result.textContent = currentPhrase;
+  }
   elements.copyButton.disabled = false;
   window.clearTimeout(copyResetTimer);
   elements.status.classList.remove("copy-feedback");
@@ -287,16 +397,21 @@ function generatePhrase() {
 }
 
 async function copyResult() {
-  const value = elements.result.value;
+  const value = currentPhrase;
   if (!value) return;
 
   try {
     await navigator.clipboard.writeText(value);
   } catch {
-    elements.result.focus();
-    elements.result.select();
+    const copyTarget = document.createElement("textarea");
+    copyTarget.value = value;
+    copyTarget.setAttribute("readonly", "");
+    copyTarget.style.position = "fixed";
+    copyTarget.style.opacity = "0";
+    document.body.append(copyTarget);
+    copyTarget.select();
     document.execCommand("copy");
-    window.getSelection()?.removeAllRanges();
+    copyTarget.remove();
   }
 
   window.clearTimeout(copyResetTimer);
@@ -315,14 +430,44 @@ async function copyResult() {
 function handleSettingsChange(event) {
   if (event.target.name === "wordList") {
     activateWordList(event.target.value);
+    void persistSettings();
     return;
   }
 
   if (event.target === elements.separator) {
     elements.customSeparatorField.hidden = elements.separator.value !== "custom";
   }
+  if (event.target === elements.minLength) {
+    const config = WORDLISTS[activeWordList];
+    const minimum = clamp(
+      readInteger(elements.minLength, config.minLength),
+      config.minLength,
+      config.maxLength
+    );
+    const maximum = clamp(
+      readInteger(elements.maxLength, config.defaultMaxLength),
+      config.minLength,
+      config.maxLength
+    );
+    if (minimum > maximum) elements.maxLength.value = String(minimum);
+  }
+  if (event.target === elements.maxLength) {
+    const config = WORDLISTS[activeWordList];
+    const minimum = clamp(
+      readInteger(elements.minLength, config.minLength),
+      config.minLength,
+      config.maxLength
+    );
+    const maximum = clamp(
+      readInteger(elements.maxLength, config.defaultMaxLength),
+      config.minLength,
+      config.maxLength
+    );
+    if (maximum < minimum) elements.minLength.value = String(maximum);
+  }
   updateSecurityMeter();
   generatePhrase();
+  void persistSettings();
 }
 
 function restoreDefaultSettings() {
@@ -334,6 +479,7 @@ function restoreDefaultSettings() {
   elements.customSeparator.value = DEFAULT_FORMATTING.customSeparator;
   elements.customSeparatorField.hidden = true;
   activateWordList("short");
+  void persistSettings();
 }
 
 function normalizeNumericInput(event) {
@@ -346,12 +492,33 @@ function normalizeNumericInput(event) {
     input.value = normalizedValue;
     updateSecurityMeter();
     generatePhrase();
+    void persistSettings();
   }
+}
+
+function openSettings() {
+  if (!elements.settingsDialog.open) elements.settingsDialog.showModal();
+}
+
+function closeSettings() {
+  elements.settingsDialog.close();
+}
+
+function closeSettingsFromBackdrop(event) {
+  if (event.target !== elements.settingsDialog) return;
+
+  const bounds = elements.settingsDialog.getBoundingClientRect();
+  const isInside =
+    event.clientX >= bounds.left &&
+    event.clientX <= bounds.right &&
+    event.clientY >= bounds.top &&
+    event.clientY <= bounds.bottom;
+  if (!isInside) closeSettings();
 }
 
 async function initialize() {
   if (!window.crypto?.getRandomValues) {
-    elements.result.value = "Your browser does not support secure random generation.";
+    elements.result.textContent = "Your browser does not support secure random generation.";
     elements.status.textContent = "Web Crypto is required.";
     return;
   }
@@ -364,10 +531,11 @@ async function initialize() {
     elements.generateButton.disabled = false;
     elements.resetButton.disabled = false;
     elements.wordListToggle.disabled = false;
-    activateWordList("short");
+    const storedSettings = await loadStoredSettings();
+    if (!applyStoredSettings(storedSettings)) activateWordList("short");
   } catch (error) {
     console.error(error);
-    elements.result.value = "The local word lists could not be loaded.";
+    elements.result.textContent = "The local word lists could not be loaded.";
     elements.status.textContent = "Serve the site through GitHub Pages or a local web server.";
   }
 }
@@ -379,4 +547,7 @@ elements.wordCount.addEventListener("blur", normalizeNumericInput);
 elements.generateButton.addEventListener("click", generatePhrase);
 elements.copyButton.addEventListener("click", copyResult);
 elements.resetButton.addEventListener("click", restoreDefaultSettings);
+elements.settingsButton.addEventListener("click", openSettings);
+elements.closeSettingsButton.addEventListener("click", closeSettings);
+elements.settingsDialog.addEventListener("click", closeSettingsFromBackdrop);
 initialize();

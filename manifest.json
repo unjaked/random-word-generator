@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Random Word Generator",
+  "version": "1.0.0",
+  "description": "Generate random words and passphrases locally.",
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Random Word Generator"
+  },
+  "permissions": [
+    "clipboardWrite",
+    "storage"
+  ]
+}
