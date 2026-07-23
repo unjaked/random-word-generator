@@ -4,6 +4,7 @@ A website and Chrome extension for generating random words and passphrases.
 
 Word count, word complexity, capitalization, separator, and length are configurable. Processed locally in the browser, nothing is saved.
 
+View here: [https://unjaked.github.io/random-word-generator/](https://unjaked.github.io/random-word-generator/)
 
 ## Install as Chrome Extension
 
