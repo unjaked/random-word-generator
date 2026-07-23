@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A fast, private random word and passphrase generator.">
+  <meta name="theme-color" content="#f5f5f5">
+  <title>Random Word Generator</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+</head>
+
+<body>
+  <main class="app">
+    <header class="app-header">
+      <h1>Random Word Generator</h1>
+    </header>
+
+    <section class="panel output-panel" aria-labelledby="result-heading">
+      <div class="section-header">
+        <h2 id="result-heading">Result</h2>
+      </div>
+
+      <textarea id="result" class="result-output" rows="3" readonly spellcheck="false"
+        aria-label="Generated words">Loading…</textarea>
+
+      <section class="compact-security" aria-labelledby="security-heading">
+        <div class="security-row">
+          <p id="security-heading">
+            Passphrase security: <strong id="security-title">Calculating…</strong>
+          </p>
+        </div>
+        <div id="securityMeter" class="meter" role="meter" aria-label="Estimated passphrase entropy" aria-valuemin="0"
+          aria-valuemax="100" aria-valuenow="0">
+          <span id="meterFill"></span>
+        </div>
+        <p id="securityDetail">Entropy reflects the eligible word pool and randomized formatting.</p>
+      </section>
+
+      <div class="actions">
+        <button id="generateButton" class="button button-primary" type="button" disabled>
+          Generate
+        </button>
+        <button id="copyButton" class="button button-secondary icon-button" type="button" aria-label="Copy result"
+          title="Copy" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+            <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+          </svg>
+          <span id="copyLabel" class="visually-hidden">Copy</span>
+        </button>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="settings-heading">
+      <div class="settings-header">
+        <h2 id="settings-heading">Settings</h2>
+        <button id="resetButton" class="button button-secondary reset-button" type="button" disabled>
+          Restore Default Settings
+        </button>
+      </div>
+
+      <form id="settingsForm" class="settings-grid">
+        <fieldset id="wordListToggle" class="word-list-toggle" disabled>
+          <legend>Word Complexity</legend>
+          <div class="segmented-control">
+            <label>
+              <input type="radio" name="wordList" value="short" checked>
+              <span>Simple</span>
+            </label>
+            <label>
+              <input type="radio" name="wordList" value="long">
+              <span>Complex</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <label class="field" for="wordCount">
+          <span>Number of Words</span>
+          <input id="wordCount" name="wordCount" type="number" min="1" max="50" value="5">
+        </label>
+
+        <label class="field" for="caseStyle">
+          <span>Capitalization</span>
+          <select id="caseStyle" name="caseStyle">
+            <option value="capitalize" selected>Capitalize</option>
+            <option value="lower">lowercase</option>
+            <option value="upper">UPPERCASE</option>
+            <option value="random">Random per Word</option>
+          </select>
+        </label>
+
+        <label class="field" for="separator">
+          <span>Separator</span>
+          <select id="separator" name="separator">
+            <option value="none" selected>None</option>
+            <option value="space">Space</option>
+            <option value="hyphen">Hyphen (-)</option>
+            <option value="underscore">Underscore (_)</option>
+            <option value="period">Period (.)</option>
+            <option value="comma">Comma (,)</option>
+            <option value="newline">New line</option>
+            <option value="random">Randomized</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </label>
+
+        <label id="customSeparatorField" class="field" for="customSeparator" hidden>
+          <span>Custom separator</span>
+          <input id="customSeparator" name="customSeparator" type="text" maxlength="8" value="/" autocomplete="off"
+            spellcheck="false">
+        </label>
+
+        <label class="field" for="minLength">
+          <span>Min Word Length</span>
+          <input id="minLength" name="minLength" type="number" min="3" max="5" value="3">
+        </label>
+
+        <label class="field" for="maxLength">
+          <span>Max Word Length</span>
+          <input id="maxLength" name="maxLength" type="number" min="3" max="5" value="5">
+        </label>
+      </form>
+    </section>
+
+    <footer>
+      <p>
+        Word lists:
+        <a href="https://www.eff.org/dice" target="_blank" rel="noopener noreferrer">EFF Long</a>
+        and
+        <a href="https://www.eff.org/document/eff-short-wordlist-passphrases-1" target="_blank"
+          rel="noopener noreferrer">EFF Short #1</a>
+      </p>
+      <p>Made by <a href="https://github.com/unjaked/bookmark-separator">@unjaked</a> on <a
+          href="https://github.com/unjaked/bookmark-separator">GitHub</a></p>
+    </footer>
+  </main>
+</body>
+
+</html>
